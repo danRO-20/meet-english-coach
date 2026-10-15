@@ -2,7 +2,7 @@
 
 Extensión de Chrome **open source y 100% local** para ayudarte con el inglés:
 
-- **🎧 Modo Reunión**: en Google Meet (o cualquier pestaña: Zoom web, Teams web, YouTube…) escucha lo que dice la otra persona, lo **transcribe en inglés**, muestra la **traducción al español** y te **sugiere una respuesta corta**.
+- **🎧 Modo Reunión**: en Google Meet (o cualquier pestaña: Zoom web, Teams web, YouTube…) muestra un **cuadro flotante de subtítulos** sobre la página, al estilo de los subtítulos en tiempo real de Chrome: el texto en inglés aparece **mientras la persona habla** y, cuando se calla, la **traducción al español** y una **respuesta sugerida**.
 - **🗣️ Modo Práctica**: conversas en voz alta con una IA que te responde hablando, mantiene la charla y **te corrige** cuando te equivocas. Situaciones: charla libre, entrevista de trabajo, reunión de trabajo, restaurante, aeropuerto/hotel; niveles básico, intermedio y avanzado.
 - **📎 Material**: carga un PDF, un Word o un texto (tu CV, una oferta de trabajo, la agenda de una reunión, un artículo…) y la IA conversa sobre eso; las sugerencias de reunión también lo usan.
 
@@ -53,12 +53,13 @@ La barra de estado del panel dice qué motor se está usando: `GPU nvidia` o `CP
 1. Abre tu llamada en `meet.google.com`.
 2. Estando en esa pestaña, haz clic en el icono **EN** de la extensión (o `Alt+Shift+E`). Se abre el panel lateral.
 3. Pulsa **▶ Escuchar esta pestaña**. La primera vez descarga Whisper (~150 MB, queda en caché).
-4. Debajo del botón verás un **medidor de audio** (verde) y si está oyendo voz, silencio o cargando Whisper.
-5. Cuando la otra persona hable verás:
-   - lo que dijo (en gris mientras habla, fijo al terminar la frase),
-   - la traducción en azul,
-   - 💡 una sugerencia de respuesta en amarillo (≈0.5 s después).
-6. **■ Dejar de escuchar** o cierra el panel para parar.
+4. Aparece un **cuadro flotante** sobre la página de Meet:
+   - el texto en **blanco** es lo que están diciendo ahora (se actualiza cada ~0.5 s mientras hablan); lo anterior queda en gris y se va desvaneciendo por arriba;
+   - cuando la persona se calla (~0.7 s de silencio): la **traducción** en azul y 💡 la **respuesta sugerida** en amarillo;
+   - **arrástralo** a donde quieras y **cambia su tamaño** desde la esquina inferior derecha (se recuerda);
+   - **◱** oculta la traducción y la sugerencia (solo subtítulos); **✕** deja de escuchar.
+5. En el panel lateral queda el **historial** de la conversación y un medidor de audio. Puedes cerrar el panel: el cuadro sigue funcionando.
+6. Si prefieres no ver el cuadro, desactívalo en ⚙️ Ajustes → *Cuadro flotante de subtítulos*.
 
 Con música de fondo también funciona: la música sola no genera texto y, si hablan encima, el texto sale igual (las frases se cierran cada 10 s como máximo).
 
@@ -90,7 +91,8 @@ La primera vez Chrome abrirá una pestaña para pedir permiso de micrófono: pul
 | Ajuste | Para qué |
 | --- | --- |
 | Modelo de Ollama | `llama3.2:3b` por defecto. Cualquiera que tengas con `ollama pull`. |
-| Modelo Whisper | **Automático** (por defecto): `small.en` con GPU dedicada, `base.en` en CPU. También puedes fijar uno. |
+| Modelo Whisper | **Automático** (por defecto): en Reunión `base.en` (subtítulos más rápidos); en Práctica `small.en` con GPU dedicada (más preciso) y `base.en` en CPU. También puedes fijar uno. |
+| Cuadro flotante | Mostrar u ocultar el cuadro de subtítulos sobre la página en el modo Reunión. |
 | Mostrar traducción | Activa o desactiva la traducción al español en el modo Reunión. |
 | Voz / velocidad | Voz en inglés de la IA del modo Práctica. |
 
@@ -108,7 +110,8 @@ La primera vez Chrome abrirá una pestaña para pedir permiso de micrófono: pul
 extension/
   manifest.json        MV3: sidePanel, tabCapture, offscreen, declarativeNetRequest
   background.js        abre el panel, crea el offscreen, regla para Ollama
-  offscreen.js         captura (pestaña y micrófono) + Whisper
+  offscreen.js         captura (pestaña y micrófono) + Whisper + sugerencias de reunión
+  overlay.js           cuadro flotante de subtítulos que se inyecta en la página escuchada
   segmenter.js         separa frases por energía/silencios
   audio-processor.js   AudioWorklet que envía bloques de 100 ms
   llm.js               prompts y llamadas a Ollama
@@ -119,8 +122,8 @@ tools/
   vendor.mjs           copia las librerías a extension/lib
   dev-test.html        banco de pruebas: segmentador + Whisper + prompts sobre un WAV
   test-llm.mjs         prueba los prompts contra Ollama desde la terminal
-  e2e.mjs              instala la extensión en un Chrome aparte, reproduce un WAV en una pestaña y
-                       registra lo que muestra el panel (modo Reunión)
+  e2e.mjs              instala la extensión en un Chrome aparte, reproduce un WAV en una pestaña,
+                       registra lo que muestra el panel y (opcional) captura el cuadro flotante
   e2e-practica.mjs     lo mismo para el modo Práctica, con un micrófono simulado
   e2e-material.mjs     crea un PDF, lo carga como material y comprueba práctica y sugerencias
   bench.mjs            mide la velocidad de Whisper (tiny/base, 4/8 hilos) dentro de la extensión

@@ -46,6 +46,11 @@ async function asegurarOffscreen() {
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, responder) => {
+  // El offscreen solo puede usar chrome.runtime: el background reenvía al cuadro flotante de la pestaña.
+  if (msg?.type === "a-overlay") {
+    chrome.tabs.sendMessage(msg.tabId, msg.msg).catch(() => {});
+    return;
+  }
   if (msg?.type === "asegurar-offscreen") {
     asegurarOffscreen().then(() => responder({ ok: true }), (e) => responder({ error: String(e) }));
     return true; // respuesta asíncrona

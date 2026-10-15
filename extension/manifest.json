@@ -10,7 +10,8 @@
     "offscreen",
     "storage",
     "activeTab",
-    "declarativeNetRequestWithHostAccess"
+    "declarativeNetRequestWithHostAccess",
+    "scripting"
   ],
   "host_permissions": [
     "http://127.0.0.1:11434/*",

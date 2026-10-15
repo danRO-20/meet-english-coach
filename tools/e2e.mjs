@@ -1,7 +1,8 @@
 // Prueba de punta a punta con la extensión instalada en un Chrome aparte (perfil temporal):
 // reproduce un WAV en una pestaña, la "escucha" con la extensión y registra lo que muestra el panel.
-//   node tools/e2e.mjs [ruta.wav] [segundos]
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+// Con una carpeta como 3.er argumento guarda capturas del cuadro flotante sobre la página.
+//   node tools/e2e.mjs [ruta.wav] [segundos] [carpeta-capturas]
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -12,6 +13,7 @@ const aqui = dirname(fileURLToPath(import.meta.url));
 const raiz = resolve(aqui, "..");
 const wav = resolve(process.argv[2] || join(aqui, "prueba.wav"));
 const segundos = Number(process.argv[3] || 90);
+const carpetaCapturas = process.argv[4];
 const CHROME = process.env.CHROME || "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 
 // Servidor mínimo: una página que reproduce el WAV en bucle.
@@ -25,6 +27,13 @@ const servidor = createServer((req, res) => {
 }).listen(8766);
 
 const perfil = mkdtempSync(join(tmpdir(), "meet-coach-e2e-"));
+// Copia de la extensión con permiso para inyectar el cuadro flotante en la página de prueba
+// (en el uso real ese permiso lo da el clic en el icono, que un script no puede hacer).
+const copia = join(perfil, "extension");
+cpSync(join(raiz, "extension"), copia, { recursive: true });
+const manifest = JSON.parse(readFileSync(join(copia, "manifest.json"), "utf8"));
+manifest.host_permissions.push("http://localhost:8766/*");
+writeFileSync(join(copia, "manifest.json"), JSON.stringify(manifest, null, 2));
 const navegador = await puppeteer.launch({
   executablePath: CHROME,
   headless: false,
@@ -42,7 +51,7 @@ const t0 = Date.now();
 const log = (...a) => console.log(((Date.now() - t0) / 1000).toFixed(1).padStart(6) + "s", ...a);
 
 try {
-  const id = await navegador.installExtension(join(raiz, "extension"));
+  const id = await navegador.installExtension(copia);
   log("extensión instalada:", id);
 
   const audio = await navegador.newPage();
@@ -67,6 +76,21 @@ try {
     }
   });
   log("escuchar:", JSON.stringify(resultado));
+  await audio.bringToFront(); // como en una llamada real: la pestaña de Meet delante
+
+  // Cada vez que cambia el texto en vivo, apuntamos la hora: así se ve cada cuánto se actualiza.
+  await panel.evaluate(() => {
+    globalThis.__cambios = [];
+    new MutationObserver(() => globalThis.__cambios.push([performance.now(), document.getElementById("parcial").textContent]))
+      .observe(document.getElementById("parcial"), { childList: true, characterData: true, subtree: true });
+  });
+  let captura = 0;
+  if (carpetaCapturas) {
+    const intervalo = setInterval(async () => {
+      try { await audio.screenshot({ path: join(carpetaCapturas, `overlay-${++captura}.png`) }); } catch {}
+    }, 2500);
+    setTimeout(() => clearInterval(intervalo), segundos * 1000);
+  }
 
   let anterior = "";
   const fin = Date.now() + segundos * 1000;
@@ -86,6 +110,9 @@ try {
     }
     await new Promise((r) => setTimeout(r, 500));
   }
+  const cambios = await panel.evaluate(() => globalThis.__cambios.filter(([, t]) => t));
+  const pasos = cambios.slice(1).map(([t], i) => t - cambios[i][0]).filter((d) => d < 3000);
+  log(`texto en vivo: ${cambios.length} actualizaciones; cada ${(pasos.reduce((a, b) => a + b, 0) / Math.max(1, pasos.length) / 1000).toFixed(2)} s de media mientras hablan`);
 } finally {
   await navegador.close();
   servidor.close();

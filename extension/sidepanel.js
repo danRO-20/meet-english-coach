@@ -1,5 +1,5 @@
 // Panel lateral: interfaz de los dos modos, llamadas a Ollama y voz de la IA.
-import { responderPractica, sugerirRespuesta, verificarOllama } from "./llm.js";
+import { responderPractica, verificarOllama } from "./llm.js";
 import { leerArchivo, prepararMaterial, textoParaIA } from "./material.js";
 
 const $ = (id) => document.getElementById(id);
@@ -9,6 +9,7 @@ const AJUSTES_POR_DEFECTO = {
   url: "http://127.0.0.1:11434",
   modeloWhisper: "auto",
   traducir: true,
+  cuadroFlotante: true,
   voz: "",
   velocidad: 0.95,
   umbralVoz: 0.004,
@@ -53,11 +54,14 @@ async function conectar() {
     puerto = null;
     setTimeout(conectar, 500); // el offscreen aún no estaba listo: reintentamos
   });
-  puerto.postMessage({ type: "ajustes", ajustes });
-  puerto.postMessage({ type: "precargar" });
+  enviarAjustes();
+  puerto.postMessage({ type: "precargar", uso: "reunion" });
 }
 
 const enviar = (msg) => puerto?.postMessage(msg);
+// El offscreen genera las sugerencias de reunión (aunque cierres el panel), así que necesita los
+// ajustes y el texto del material.
+const enviarAjustes = () => enviar({ type: "ajustes", ajustes: { ...ajustes, materialIA: textoParaIA(material) } });
 
 function manejarMensaje(msg) {
   switch (msg.type) {
@@ -67,7 +71,9 @@ function manejarMensaje(msg) {
     case "reunion-activa": ponerEscuchando(true); break;
     case "reunion-detenida": ponerEscuchando(false); break;
     case "parcial": $("parcial").textContent = msg.texto ? msg.texto + "…" : ""; break;
-    case "final": nuevaFraseReunion(msg.texto); break;
+    case "final": nuevaFraseReunion(msg); break;
+    case "pensando": mostrarPensando(msg); break;
+    case "sugerencia": mostrarSugerencia(msg); break;
     case "sin-voz": $("parcial").textContent = "🎵 Sonido sin voz que se entienda (música o ruido)"; break;
     case "reunion-nivel": mostrarNivel(msg); break;
     // Práctica
@@ -87,9 +93,6 @@ function manejarMensaje(msg) {
 
 // ================================================================== MODO REUNIÓN
 let escuchando = false;
-const contexto = [];          // frases recientes de la otra persona
-let pendientes = [];          // frases que esperan sugerencia
-let generando = false;
 
 function ponerEscuchando(si) {
   escuchando = si;
@@ -119,7 +122,14 @@ async function alternarEscucha(_evento, tabIdForzado) {
   try {
     const tabId = tabIdForzado ?? (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0].id;
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
-    enviar({ type: "reunion-iniciar", streamId });
+    enviar({ type: "reunion-iniciar", streamId, tabId });
+    if (ajustes.cuadroFlotante) {
+      // Cuadro de subtítulos sobre la propia página (como los subtítulos de Chrome).
+      chrome.scripting.executeScript({ target: { tabId }, files: ["overlay.js"] }).catch((e) => {
+        $("aviso-reunion").textContent = "No pude mostrar el cuadro flotante en esta página (" + e.message + "). " +
+          "Los subtítulos siguen aquí en el panel.";
+      });
+    }
   } catch (e) {
     $("aviso-reunion").textContent =
       "No pude capturar esta pestaña. Ve a la pestaña de Meet, haz clic en el icono de la extensión " +
@@ -127,44 +137,29 @@ async function alternarEscucha(_evento, tabIdForzado) {
   }
 }
 
-function nuevaFraseReunion(texto) {
+function nuevaFraseReunion({ id, texto }) {
   $("parcial").textContent = "";
   const item = crear("div", "item");
+  item.dataset.id = id;
   item.appendChild(crear("div", "ellos", texto));
   agregarAlFeed($("feed"), item);
-  if (texto.split(/\s+/).length < 2) return; // "Yeah.", "Okay." no necesitan sugerencia
-  pendientes.push({ texto, item });
-  procesarPendientes();
 }
 
-async function procesarPendientes() {
-  if (generando || pendientes.length === 0) return;
-  generando = true;
-  // Si la persona dijo varias frases seguidas, respondemos a todas juntas en la última tarjeta.
-  const lote = pendientes;
-  pendientes = [];
-  const frase = lote.map((p) => p.texto).join(" ");
-  const item = lote.at(-1).item;
-  const sug = item.appendChild(crear("div", "sug pensando", "pensando…"));
-  try {
-    const { respuesta, traduccion } = await sugerirRespuesta({
-      url: ajustes.url,
-      modelo: ajustes.modelo,
-      frase,
-      contexto: contexto.slice(-6),
-      traducir: ajustes.traducir,
-      material: textoParaIA(material),
-    });
-    if (traduccion) item.insertBefore(crear("div", "es", traduccion), sug);
-    sug.className = "sug";
-    sug.textContent = respuesta;
-    $("feed").scrollTop = $("feed").scrollHeight;
-  } catch (e) {
-    sug.textContent = "Sin sugerencia: " + e.message;
-  }
-  contexto.push(frase);
-  generando = false;
-  procesarPendientes();
+const tarjeta = (id) => $("feed").querySelector(`.item[data-id="${id}"]`);
+
+function mostrarPensando({ id }) {
+  const item = tarjeta(id);
+  if (item && !item.querySelector(".sug")) item.appendChild(crear("div", "sug pensando", "pensando…"));
+}
+
+function mostrarSugerencia({ id, respuesta, traduccion, error }) {
+  const item = tarjeta(id);
+  if (!item) return;
+  const sug = item.querySelector(".sug") || item.appendChild(crear("div", "sug"));
+  if (traduccion) item.insertBefore(crear("div", "es", traduccion), sug);
+  sug.className = "sug";
+  sug.textContent = respuesta || error || "";
+  $("feed").scrollTop = $("feed").scrollHeight;
 }
 
 // ================================================================== MODO PRÁCTICA
@@ -291,6 +286,7 @@ async function usarMaterial(nuevo) {
   material = nuevo;
   await chrome.storage.local.set({ material });
   mostrarMaterial();
+  enviarAjustes();
   $("panel-material").classList.add("oculto");
   $("aviso-material").textContent = "";
   $("escenario").value = "material"; // lo normal es querer practicar justo sobre eso
@@ -325,6 +321,7 @@ $("btn-usar-texto").addEventListener("click", () => {
 $("material-seccion").addEventListener("change", async (e) => {
   material.seccion = Number(e.target.value);
   await chrome.storage.local.set({ material });
+  enviarAjustes();
 });
 $("btn-quitar-material").addEventListener("click", async () => {
   material = null;
@@ -348,6 +345,7 @@ async function cargarAjustes() {
   $("cfg-url").value = ajustes.url;
   $("cfg-whisper").value = ajustes.modeloWhisper;
   $("cfg-traducir").checked = ajustes.traducir;
+  $("cfg-flotante").checked = ajustes.cuadroFlotante;
   $("cfg-velocidad").value = ajustes.velocidad;
 }
 
@@ -358,11 +356,12 @@ async function guardarAjustes() {
     url: ($("cfg-url").value.trim() || AJUSTES_POR_DEFECTO.url).replace(/\/$/, ""),
     modeloWhisper: $("cfg-whisper").value,
     traducir: $("cfg-traducir").checked,
+    cuadroFlotante: $("cfg-flotante").checked,
     voz: $("cfg-voz").value,
     velocidad: Number($("cfg-velocidad").value),
   };
   await chrome.storage.local.set({ ajustes });
-  enviar({ type: "ajustes", ajustes });
+  enviarAjustes();
   comprobarOllama();
 }
 
@@ -403,7 +402,6 @@ document.querySelectorAll(".pestana").forEach((b) =>
 $("btn-escuchar").addEventListener("click", alternarEscucha);
 $("btn-limpiar").addEventListener("click", () => {
   $("feed").replaceChildren();
-  contexto.length = 0;
 });
 $("btn-empezar").addEventListener("click", empezarPractica);
 $("btn-nueva").addEventListener("click", empezarPractica);
@@ -414,7 +412,7 @@ $("form-texto").addEventListener("submit", (e) => {
   $("input-texto").value = "";
   if (t.trim()) turnoAlumno(t);
 });
-for (const id of ["cfg-modelo", "cfg-url", "cfg-whisper", "cfg-traducir", "cfg-voz", "cfg-velocidad"]) {
+for (const id of ["cfg-modelo", "cfg-url", "cfg-whisper", "cfg-traducir", "cfg-flotante", "cfg-voz", "cfg-velocidad"]) {
   $(id).addEventListener("change", guardarAjustes);
 }
 speechSynthesis.onvoiceschanged = llenarVoces;
