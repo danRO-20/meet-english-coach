@@ -1,6 +1,6 @@
 // Panel lateral: interfaz de los dos modos, llamadas a Ollama y voz de la IA.
 import { responderPractica, sugerirRespuesta, verificarOllama } from "./llm.js";
-import { MAX_CARACTERES, leerArchivo, limpiar } from "./material.js";
+import { leerArchivo, prepararMaterial, textoParaIA } from "./material.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -153,7 +153,7 @@ async function procesarPendientes() {
       frase,
       contexto: contexto.slice(-6),
       traducir: ajustes.traducir,
-      material,
+      material: textoParaIA(material),
     });
     if (traduccion) item.insertBefore(crear("div", "es", traduccion), sug);
     sug.className = "sug";
@@ -214,7 +214,7 @@ async function turnoIA() {
       escenario: $("escenario").value,
       nivel: $("nivel").value,
       historial,
-      material,
+      material: textoParaIA(material),
     });
     escribiendo.remove();
     if (r.correccion) {
@@ -276,6 +276,15 @@ function mostrarMaterial() {
     : "Sin material";
   n.title = material ? material.texto.slice(0, 400) + "…" : "";
   $("btn-quitar-material").classList.toggle("oculto", !material);
+  // Material largo (un libro, varias unidades): eliges de qué parte hablar.
+  const sel = $("material-seccion");
+  const secciones = material?.secciones ?? [];
+  sel.classList.toggle("oculto", secciones.length < 2);
+  sel.replaceChildren(
+    new Option("Todo (un poco de cada)", "-1"),
+    ...secciones.map((s, i) => new Option(s.titulo, String(i))),
+  );
+  sel.value = String(material?.seccion ?? -1);
 }
 
 async function usarMaterial(nuevo) {
@@ -304,10 +313,18 @@ $("input-archivo").addEventListener("change", (e) => {
   e.target.value = "";
 });
 $("btn-usar-texto").addEventListener("click", () => {
-  const texto = limpiar($("texto-material").value);
-  if (!texto) return;
-  usarMaterial({ nombre: "Texto pegado", texto: texto.slice(0, MAX_CARACTERES), recortado: texto.length > MAX_CARACTERES });
+  const texto = $("texto-material").value;
+  if (!texto.trim()) return;
+  try {
+    usarMaterial(prepararMaterial("Texto pegado", texto));
+  } catch (e) {
+    $("aviso-material").textContent = e.message;
+  }
   $("texto-material").value = "";
+});
+$("material-seccion").addEventListener("change", async (e) => {
+  material.seccion = Number(e.target.value);
+  await chrome.storage.local.set({ material });
 });
 $("btn-quitar-material").addEventListener("click", async () => {
   material = null;

@@ -77,8 +77,10 @@ La primera vez Chrome abrirá una pestaña para pedir permiso de micrófono: pul
 
 1. Pulsa **📎 Material** (arriba en el panel) y luego **📄 Subir archivo**, o pega el texto y pulsa **Usar este texto**. También puedes **arrastrar** el archivo al panel.
    - Formatos: **PDF** (con texto, no escaneado), **Word (.docx)**, **.txt / .md**, subtítulos **.srt / .vtt**.
-   - Se usan los primeros ~10.000 caracteres (unas 4 páginas). El archivo se lee en tu PC y no se sube a ningún sitio.
-2. En **🗣️ Práctica** se elige sola la situación **📄 Sobre mi material**: la IA te pregunta por detalles concretos del texto y comenta tus respuestas.
+   - Puede ser largo (un libro de varias unidades, hasta ~120.000 caracteres). Si detecta títulos como **Unit 1, Unit 2…** (o Unidad, Chapter, Module…), aparece un selector para elegir **qué unidad practicar**; si no hay títulos, lo divide en partes. A la IA se le pasa solo la parte elegida (~10.000 caracteres).
+   - El archivo se lee en tu PC y no se sube a ningún sitio.
+2. En **🗣️ Práctica** se elige sola la situación **📄 Sobre mi material**. Si es una **lección de inglés** (gramática, vocabulario), la IA no te toma examen: conversa sobre tu vida con preguntas que te obligan a usar esa gramática (p. ej. en una unidad de *simple past* te pregunta qué hiciste el verano pasado). Si es otro tipo de texto, lo comenta contigo.
+   - Cada respuesta tuya la revisa un **corrector aparte** que te muestra la frase corregida y una explicación en español.
 3. En las demás situaciones el material sirve de contexto. Ejemplo: carga tu **CV** y elige **Entrevista de trabajo**: el entrevistador te preguntará por *tu* experiencia real.
 4. En **🎧 Reunión**, las sugerencias usan los datos del material en vez de huecos como `[your city]`. Ejemplo con tu CV: a *"Tell me about yourself"* te sugiere una respuesta con tu trabajo real.
 5. El material queda guardado hasta que pulses **✕**.
