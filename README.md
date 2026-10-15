@@ -1,0 +1,121 @@
+# Meet English Coach
+
+Extensión de Chrome **open source y 100% local** para ayudarte con el inglés:
+
+- **🎧 Modo Reunión**: en Google Meet (o cualquier pestaña: Zoom web, Teams web, YouTube…) escucha lo que dice la otra persona, lo **transcribe en inglés**, muestra la **traducción al español** y te **sugiere una respuesta corta**.
+- **🗣️ Modo Práctica**: conversas en voz alta con una IA que te responde hablando, mantiene la charla y **te corrige** cuando te equivocas. Situaciones: charla libre, entrevista de trabajo, reunión de trabajo, restaurante, aeropuerto/hotel; niveles básico, intermedio y avanzado.
+
+Nada sale de tu PC: la voz se transcribe con **Whisper** dentro del navegador ([transformers.js](https://github.com/huggingface/transformers.js), WebGPU o WASM) y las respuestas las genera un modelo local con **[Ollama](https://ollama.com)**. Sin APIs de pago.
+
+## Cómo funciona
+
+```
+Pestaña de Meet ──audio──► documento offscreen (tabCapture + AudioWorklet 16 kHz)
+                              │  segmenta frases por silencios
+                              ▼
+                           Whisper (transformers.js, WebGPU/WASM)
+                              │  texto en inglés
+                              ▼
+Panel lateral ◄──────────── transcripción ──► Ollama local (llama3.2:3b)
+  (sugerencia + traducción)                    │
+                                               ▼
+Micrófono ──► Whisper ──► Ollama (tutor) ──► voz de la IA (speechSynthesis)
+```
+
+- **Captura**: la extensión graba el audio de la pestaña (no del sistema) y lo sigue reproduciendo para que tú oigas la llamada normal. Solo capta a los demás: Meet no te devuelve tu propia voz.
+- **El panel es lateral**: si compartes pantalla o una pestaña en Meet, el panel no aparece en lo que compartes.
+- **Ollama** rechaza por defecto peticiones de extensiones; la extensión lo resuelve quitando la cabecera `Origin` solo en sus propias peticiones a `127.0.0.1:11434` (regla `declarativeNetRequest`). No tienes que configurar nada.
+
+## Instalación (Windows, 5 minutos)
+
+1. **Instala Ollama** desde <https://ollama.com/download> (o `winget install Ollama.Ollama`) y descarga el modelo:
+   ```bash
+   ollama pull llama3.2:3b
+   ```
+   Con 4 GB+ de VRAM va sobrado. Alternativas: `qwen2.5:3b`, `phi3:mini` (cámbialo en ⚙️ Ajustes).
+2. **Descarga este repositorio** (botón *Code → Download ZIP* y descomprímelo, o `git clone`).
+3. Abre `chrome://extensions`, activa **Modo de desarrollador** (arriba a la derecha) → **Cargar descomprimida** → elige la carpeta **`extension/`**.
+4. (Opcional) Fija la extensión en la barra de Chrome con el icono 🧩.
+
+### ⚡ Si tu laptop tiene GPU NVIDIA (muy recomendado)
+
+En laptops con dos GPU, Chrome usa por defecto la **integrada (Intel/AMD)** y Whisper va lento (~15 s por frase). Haz que Chrome use la NVIDIA:
+
+1. Windows → **Configuración → Sistema → Pantalla → Gráficos**.
+2. Busca **Google Chrome** (si no aparece: *Agregar aplicación* → `C:\Program Files\Google\Chrome\Application\chrome.exe`).
+3. **Opciones → Alto rendimiento (NVIDIA)** → Guardar, y **reinicia Chrome por completo**.
+
+Con eso Whisper transcribe una frase en menos de 1 s. Si la extensión detecta que la GPU es lenta, usa la CPU automáticamente (≈3–4 s por frase) y lo indica en la barra de estado.
+
+## Uso en Google Meet
+
+1. Abre tu llamada en `meet.google.com`.
+2. Estando en esa pestaña, haz clic en el icono **EN** de la extensión (o `Alt+Shift+E`). Se abre el panel lateral.
+3. Pulsa **▶ Escuchar esta pestaña**. La primera vez descarga Whisper (~150 MB, queda en caché).
+4. Cuando la otra persona hable verás:
+   - lo que dijo (en gris mientras habla, fijo al terminar la frase),
+   - la traducción en azul,
+   - 💡 una sugerencia de respuesta en amarillo (≈0.5 s después).
+5. **■ Dejar de escuchar** o cierra el panel para parar.
+
+> La sugerencia es una ayuda para orientarte, no un guion: tú decides qué decir.
+
+## Modo Práctica
+
+1. En el panel, pestaña **🗣️ Práctica**. Elige situación y nivel → **Empezar conversación**.
+2. La IA te saluda **en voz alta**. Pulsa **🎤 Hablar**, responde en inglés y pulsa **■ Enviar**.
+3. Si te equivocas verás en verde la versión corregida y una explicación corta en español.
+4. 🔊 repite la frase de la IA. También puedes escribir tu respuesta en el cuadro de texto.
+
+La primera vez Chrome abrirá una pestaña para pedir permiso de micrófono: pulsa **Permitir** y vuelve al panel.
+
+## Ajustes (⚙️ al pie del panel)
+
+| Ajuste | Para qué |
+| --- | --- |
+| Modelo de Ollama | `llama3.2:3b` por defecto. Cualquiera que tengas con `ollama pull`. |
+| Modelo Whisper | `base.en` (rápido) o `small.en` (más preciso, más pesado). |
+| Mostrar traducción | Activa o desactiva la traducción al español en el modo Reunión. |
+| Voz / velocidad | Voz en inglés de la IA del modo Práctica. |
+
+## Problemas frecuentes
+
+- **"Ollama no está corriendo"** → abre Ollama desde el menú Inicio (queda como icono junto al reloj).
+- **"Falta el modelo"** → `ollama pull llama3.2:3b`.
+- **"No pude capturar esta pestaña"** → ve a la pestaña de Meet, haz clic en el icono de la extensión (eso da permiso para esa pestaña) y vuelve a pulsar Escuchar.
+- **No detecta voz** → sube el volumen de la persona en Meet. Para cambiar la sensibilidad, edita `umbralVoz` en `extension/sidepanel.js`.
+- **Va lento** → mira la sección de GPU NVIDIA de arriba.
+
+## Desarrollo
+
+```
+extension/
+  manifest.json        MV3: sidePanel, tabCapture, offscreen, declarativeNetRequest
+  background.js        abre el panel, crea el offscreen, regla para Ollama
+  offscreen.js         captura (pestaña y micrófono) + Whisper
+  segmenter.js         separa frases por energía/silencios
+  audio-processor.js   AudioWorklet que envía bloques de 100 ms
+  llm.js               prompts y llamadas a Ollama
+  sidepanel.*          interfaz de los dos modos
+  lib/                 transformers.js + onnxruntime-web (empaquetados: MV3 no permite CDN)
+tools/
+  vendor.mjs           copia las librerías a extension/lib
+  dev-test.html        banco de pruebas: segmentador + Whisper + prompts sobre un WAV
+  test-llm.mjs         prueba los prompts contra Ollama desde la terminal
+```
+
+Actualizar las librerías:
+
+```bash
+cd tools && npm install && node vendor.mjs
+```
+
+Probar prompts: `node tools/test-llm.mjs`. Probar Whisper: sirve la raíz del repo (`python -m http.server 8765`) y abre `http://localhost:8765/tools/dev-test.html?wav=/tools/tu-audio.wav`.
+
+## Uso responsable
+
+El modo Reunión procesa la voz de otras personas (en tu PC, sin enviarla a ningún lado). Úsalo con criterio y, si corresponde, avisa a los demás.
+
+## Licencia
+
+[MIT](LICENSE)

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meet English Coach</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header>
+    <div class="marca">Meet English Coach</div>
+    <nav>
+      <button class="pestana activa" data-modo="reunion">🎧 Reunión</button>
+      <button class="pestana" data-modo="practica">🗣️ Práctica</button>
+    </nav>
+    <div id="estado" class="estado">Iniciando…</div>
+  </header>
+
+  <!-- ============================================================ Modo Reunión -->
+  <section id="modo-reunion" class="modo">
+    <div class="barra">
+      <button id="btn-escuchar" class="primario">▶ Escuchar esta pestaña</button>
+      <button id="btn-limpiar" class="secundario" title="Limpiar">⌫</button>
+    </div>
+    <p id="aviso-reunion" class="aviso"></p>
+    <div id="feed" class="feed">
+      <p class="vacio">Abre tu llamada de Google Meet en esta pestaña y pulsa <b>Escuchar</b>.
+        Aquí verás lo que dice la otra persona, su traducción y una sugerencia de respuesta.</p>
+    </div>
+    <div id="parcial" class="parcial"></div>
+  </section>
+
+  <!-- ============================================================ Modo Práctica -->
+  <section id="modo-practica" class="modo oculto">
+    <div class="barra">
+      <select id="escenario" title="Situación">
+        <option value="libre">Charla libre</option>
+        <option value="entrevista">Entrevista de trabajo</option>
+        <option value="reunion">Reunión de trabajo</option>
+        <option value="restaurante">Restaurante</option>
+        <option value="viaje">Aeropuerto / hotel</option>
+      </select>
+      <select id="nivel" title="Nivel">
+        <option value="basico">Básico</option>
+        <option value="intermedio" selected>Intermedio</option>
+        <option value="avanzado">Avanzado</option>
+      </select>
+      <button id="btn-nueva" class="secundario" title="Nueva conversación">↺</button>
+    </div>
+    <div id="chat" class="feed">
+      <p class="vacio">Elige una situación y pulsa <b>Empezar</b>. La IA te habla en inglés,
+        tú respondes con tu voz y te corrige si te equivocas.</p>
+    </div>
+    <div class="controles-practica">
+      <button id="btn-empezar" class="primario ancho">Empezar conversación</button>
+      <button id="btn-hablar" class="mic oculto" title="Pulsa para hablar, pulsa otra vez para enviar">
+        <span class="nivel-mic" id="nivel-mic"></span>
+        <span id="txt-hablar">🎤 Hablar</span>
+      </button>
+      <form id="form-texto" class="form-texto oculto">
+        <input id="input-texto" placeholder="…o escribe tu respuesta" autocomplete="off">
+      </form>
+    </div>
+  </section>
+
+  <!-- ============================================================ Ajustes -->
+  <details id="ajustes">
+    <summary>⚙️ Ajustes</summary>
+    <label>Modelo de Ollama <input id="cfg-modelo" placeholder="llama3.2:3b"></label>
+    <label>URL de Ollama <input id="cfg-url" placeholder="http://127.0.0.1:11434"></label>
+    <label>Modelo Whisper
+      <select id="cfg-whisper">
+        <option value="onnx-community/whisper-base.en">base.en (rápido, ~150 MB)</option>
+        <option value="onnx-community/whisper-small.en">small.en (más preciso, ~500 MB)</option>
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" id="cfg-traducir"> Mostrar traducción al español</label>
+    <label>Voz de la IA <select id="cfg-voz"></select></label>
+    <label>Velocidad de la voz <input type="range" id="cfg-velocidad" min="0.6" max="1.3" step="0.05"></label>
+  </details>
+
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>

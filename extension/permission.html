@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Permiso de micrófono</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #15161a; color: #e8e8e8; display: grid; place-items: center; min-height: 100vh; margin: 0; }
+    .caja { max-width: 420px; padding: 32px; background: #1f2026; border-radius: 14px; text-align: center; }
+    button { background: #ffd866; color: #15161a; border: 0; padding: 12px 22px; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; }
+    p { color: #b0b4bb; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="caja">
+    <h2>🎤 Permitir micrófono</h2>
+    <p>El modo <b>Práctica</b> necesita tu micrófono. Tu voz se transcribe en tu propio PC; no se envía a ningún servidor.</p>
+    <button id="permitir">Permitir micrófono</button>
+    <p id="resultado"></p>
+  </div>
+  <script src="permission.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "meet-english-coach-tools",
+  "version": "1.0.0",
+  "description": "Herramientas de desarrollo",
+  "scripts": {
+    "vendor": "node vendor.mjs",
+    "test-llm": "node test-llm.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1"
+  },
+  "private": true
+}

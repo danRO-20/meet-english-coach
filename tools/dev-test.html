@@ -1,0 +1,75 @@
+<!doctype html>
+<!--
+  Banco de pruebas para desarrollo (fuera de la extensión): corre el mismo segmentador, Whisper y prompts
+  sobre un WAV. Sirve la carpeta raíz del repo y abre /tools/dev-test.html?wav=/tools/prueba.wav
+    python -m http.server 8765
+-->
+<html lang="es">
+<head><meta charset="utf-8"><title>Dev test</title>
+<style>body{font:14px system-ui;background:#15161a;color:#e8e8e8;padding:16px}pre{white-space:pre-wrap}</style></head>
+<body>
+<h3>Banco de pruebas</h3>
+<pre id="log"></pre>
+<script type="module">
+import { pipeline, env } from "../extension/lib/transformers.min.js";
+import { Segmentador } from "../extension/segmenter.js";
+import { sugerirRespuesta, responderPractica } from "../extension/llm.js";
+
+const log = (...a) => { document.getElementById("log").textContent += a.join(" ") + "\n"; console.log(...a); };
+window.resultados = { finales: [], sugerencias: [], practica: null, errores: [] };
+const t0 = performance.now();
+const t = () => ((performance.now() - t0) / 1000).toFixed(2) + "s";
+
+try {
+  env.allowLocalModels = false;
+  env.backends.onnx.wasm.wasmPaths = new URL("../extension/lib/", location).href;
+  const params = new URLSearchParams(location.search);
+  const hayGPU = !!(navigator.gpu && (await navigator.gpu.requestAdapter()));
+  log(t(), "WebGPU:", hayGPU);
+  const asr = await pipeline("automatic-speech-recognition", params.get("modelo") || "onnx-community/whisper-base.en",
+    hayGPU ? { device: "webgpu", dtype: { encoder_model: "fp32", decoder_model_merged: "q4" } } : { device: "wasm", dtype: "q8" });
+  await asr(new Float32Array(16000));
+  log(t(), "Whisper listo");
+  window.resultados.dispositivo = hayGPU ? "webgpu" : "wasm";
+
+  const buf = await (await fetch(params.get("wav") || "prueba.wav")).arrayBuffer();
+  const ctx = new OfflineAudioContext(1, 1, 16000);
+  const audio = (await ctx.decodeAudioData(buf)).getChannelData(0);
+
+  const finales = [];
+  const seg = new Segmentador({ onParcial: () => {}, onFinal: (a) => finales.push(a) });
+  for (let i = 0; i < audio.length; i += 1600) seg.empujar(audio.slice(i, i + 1600));
+  for (let i = 0; i < 20; i++) seg.empujar(new Float32Array(1600)); // silencio final
+  log(t(), "Frases detectadas:", finales.length);
+
+  for (const a of finales) {
+    const ti = performance.now();
+    const texto = (await asr(a)).text.trim();
+    log(t(), `FINAL (${((performance.now() - ti) / 1000).toFixed(2)}s, ${(a.length / 16000).toFixed(1)}s audio):`, texto);
+    window.resultados.finales.push(texto);
+  }
+
+  const url = "http://127.0.0.1:11434", modelo = "llama3.2:3b";
+  for (const frase of window.resultados.finales.filter((f) => f.split(" ").length > 1)) {
+    const ti = performance.now();
+    const r = await sugerirRespuesta({ url, modelo, frase, contexto: [], traducir: true });
+    log(t(), `SUGERENCIA (${((performance.now() - ti) / 1000).toFixed(2)}s):`, JSON.stringify(r));
+    window.resultados.sugerencias.push(r);
+  }
+
+  const historial = [];
+  const p1 = await responderPractica({ url, modelo, escenario: "entrevista", nivel: "intermedio", historial });
+  log(t(), "PRACTICA IA:", JSON.stringify(p1));
+  historial.push({ role: "assistant", content: p1.respuesta }, { role: "user", content: "yes i am work as developer since two years in a startup of lima" });
+  const p2 = await responderPractica({ url, modelo, escenario: "entrevista", nivel: "intermedio", historial });
+  log(t(), "PRACTICA IA (con error del alumno):", JSON.stringify(p2));
+  window.resultados.practica = [p1, p2];
+} catch (e) {
+  log("ERROR", e.stack || e);
+  window.resultados.errores.push(String(e));
+}
+window.resultados.listo = true;
+log(t(), "FIN");
+</script>
+</body>
+</html>
