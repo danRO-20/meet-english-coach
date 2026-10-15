@@ -13,5 +13,8 @@
   "dependencies": {
     "@huggingface/transformers": "^3.8.1"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "puppeteer-core": "^24.43.1"
+  }
 }

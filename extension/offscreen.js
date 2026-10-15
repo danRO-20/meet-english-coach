@@ -8,13 +8,22 @@ let ajustes = {};
 let whisper = null;          // pipeline de transformers.js
 let cargandoWhisper = null;
 let colaTranscripcion = Promise.resolve();
-let ocupado = false;
-let enCPU = false;            // en CPU no hacemos parciales: cada transcripción tarda segundos
+let enCola = 0;              // transcripciones esperando o en curso
+let enCPU = false;
 
 const enviar = (msg) => panel?.postMessage(msg);
 const estado = (texto) => enviar({ type: "estado", clave: "stt", texto });
 
 // ------------------------------------------------------------------ Whisper
+// Elige el motor: WebGPU solo con GPU dedicada (NVIDIA/AMD). En las gráficas Intel integradas
+// WebGPU es mucho más lento que la CPU y además tarda ~40 s en compilar, así que ni lo intentamos.
+async function elegirMotor() {
+  const adaptador = navigator.gpu && (await navigator.gpu.requestAdapter({ powerPreference: "high-performance" }));
+  const fabricante = adaptador?.info?.vendor || "";
+  if (adaptador && fabricante !== "intel") return { device: "webgpu", fabricante };
+  return { device: "wasm", fabricante };
+}
+
 async function cargarWhisper() {
   if (whisper) return whisper;
   if (cargandoWhisper) return cargandoWhisper;
@@ -23,40 +32,31 @@ async function cargarWhisper() {
     env.allowLocalModels = false;
     env.backends.onnx.wasm.wasmPaths = chrome.runtime.getURL("lib/");
     env.backends.onnx.webgpu.powerPreference = "high-performance";
+    // Varios hilos en CPU (requiere crossOriginIsolated, activado en el manifest). Más de 4 casi no
+    // acelera y deja sin CPU al resto de Chrome (la llamada, el panel).
+    env.backends.onnx.wasm.numThreads = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 2));
 
+    const { device, fabricante } = await elegirMotor();
+    enCPU = device === "wasm";
     const modelo = ajustes.modeloWhisper || "onnx-community/whisper-base.en";
     const nombreCorto = modelo.split("/").pop();
-    const crear = (opciones) =>
-      pipeline("automatic-speech-recognition", modelo, {
-        ...opciones,
-        progress_callback: (info) => {
-          if (info.status === "progress" && info.file?.endsWith(".onnx")) {
-            estado(`Descargando ${nombreCorto}: ${Math.round(info.progress)}%`);
-          }
-        },
-      });
-
     estado(`Cargando ${nombreCorto} (la 1.ª vez se descarga)…`);
-    const adaptador = navigator.gpu && (await navigator.gpu.requestAdapter({ powerPreference: "high-performance" }));
-    if (adaptador) {
-      const p = await crear({ device: "webgpu", dtype: { encoder_model: "fp32", decoder_model_merged: "q4" } });
-      await p(new Float32Array(FRECUENCIA)); // 1.ª pasada: compila los shaders
-      const t0 = performance.now();
-      await p(new Float32Array(FRECUENCIA));
-      // En laptops con dos GPU, Chrome suele usar la integrada (Intel) y ahí WebGPU es más lento que la CPU.
-      if (performance.now() - t0 < 1500) {
-        whisper = p;
-        estado(`GPU (${adaptador.info?.vendor || "webgpu"}) · ${nombreCorto}`);
-        return p;
-      }
-      await p.dispose();
-      estado(`La GPU ${adaptador.info?.vendor || ""} es lenta; usando CPU (ver README)…`);
-    }
-    const p = await crear({ device: "wasm", dtype: "q8" });
-    await p(new Float32Array(FRECUENCIA));
+    const p = await pipeline("automatic-speech-recognition", modelo, {
+      device,
+      dtype: enCPU ? "q8" : { encoder_model: "fp32", decoder_model_merged: "q4" },
+      progress_callback: (info) => {
+        if (info.status === "progress" && info.file?.endsWith(".onnx")) {
+          estado(`Descargando ${nombreCorto}: ${Math.round(info.progress)}%`);
+        }
+      },
+    });
+    await p(new Float32Array(FRECUENCIA)); // calentamiento
     whisper = p;
-    enCPU = true;
-    estado(`CPU · ${nombreCorto}`);
+    const hilos = self.crossOriginIsolated ? env.backends.onnx.wasm.numThreads : 1;
+    estado(enCPU
+      ? `CPU ×${hilos}${fabricante === "intel" ? " (Chrome usa la GPU Intel, ver README)" : ""} · ${nombreCorto}`
+      : `GPU ${fabricante} · ${nombreCorto}`);
+    enviar({ type: "whisper-listo" });
     return p;
   })().catch((e) => {
     cargandoWhisper = null;
@@ -75,21 +75,24 @@ function limpiarTexto(texto) {
 
 async function transcribir(audio) {
   const p = await cargarWhisper();
-  ocupado = true;
-  try {
-    const salida = await p(audio);
-    const texto = limpiarTexto(salida.text || "");
-    return /thanks for watching|thank you for watching|subscribe/i.test(texto) ? "" : texto;
-  } finally {
-    ocupado = false;
-  }
+  const salida = await p(audio);
+  const texto = limpiarTexto(salida.text || "");
+  return /thanks for watching|thank you for watching|subscribe/i.test(texto) ? "" : texto;
 }
 
-// Las finales van en fila (no se pierde ninguna); las parciales se saltan si Whisper está ocupado.
+// Las finales van en fila (no se pierde ninguna).
 function transcribirEnCola(audio) {
-  const r = colaTranscripcion.then(() => transcribir(audio));
+  enCola++;
+  const r = colaTranscripcion.then(() => transcribir(audio)).finally(() => enCola--);
   colaTranscripcion = r.catch(() => {});
   return r;
+}
+
+// Las parciales solo si Whisper ya cargó y no hay nada pendiente: así nunca se acumula atraso.
+// En CPU dejamos además 1 s de respiro entre parciales para no saturar el procesador.
+let finUltimoParcial = 0;
+function puedeHacerParcial() {
+  return whisper && enCola === 0 && performance.now() - finUltimoParcial > (enCPU ? 1000 : 0);
 }
 
 // ------------------------------------------------------------------ captura con AudioWorklet
@@ -123,18 +126,34 @@ async function iniciarReunion(streamId) {
 
   const seg = new Segmentador({
     umbral: ajustes.umbralVoz ?? 0.004,
+    intervaloParcial: 0.6,
+    maxFrase: 10, // frases largas o música continua: cortamos cada 10 s para que el texto vaya saliendo
     onParcial: async (audio) => {
       if (!audio) return enviar({ type: "parcial", texto: "" });
-      if (ocupado || enCPU) return;
-      const texto = await transcribirEnCola(audio).catch(() => "");
+      // Con menos de 1.2 s Whisper suele inventar ("Good evening.", "Greetings.").
+      if (!puedeHacerParcial() || audio.length < FRECUENCIA * 1.2) return;
+      // Para el parcial basta con los últimos segundos: mantiene cada pasada rápida.
+      const ventana = audio.subarray(Math.max(0, audio.length - FRECUENCIA * (enCPU ? 5 : 10)));
+      const texto = await transcribirEnCola(ventana).catch(() => "");
+      finUltimoParcial = performance.now();
       if (texto) enviar({ type: "parcial", texto });
     },
     onFinal: async (audio) => {
       const texto = await transcribirEnCola(audio).catch(() => "");
-      enviar(texto ? { type: "final", texto } : { type: "parcial", texto: "" });
+      enviar(texto ? { type: "final", texto } : { type: "sin-voz" });
     },
   });
-  const detenerCaptura = await crearCaptura(stream, (bloque) => seg.empujar(bloque));
+  let ultimoNivel = 0;
+  const detenerCaptura = await crearCaptura(stream, (bloque) => {
+    seg.empujar(bloque);
+    const ahora = performance.now();
+    if (ahora - ultimoNivel > 150) {
+      ultimoNivel = ahora;
+      let s = 0;
+      for (let i = 0; i < bloque.length; i++) s += bloque[i] * bloque[i];
+      enviar({ type: "reunion-nivel", nivel: Math.sqrt(s / bloque.length), voz: seg.enFrase, cargando: !whisper });
+    }
+  });
   detenerReunion = () => {
     detenerCaptura();
     ctxAltavoz.close();

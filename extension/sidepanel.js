@@ -66,6 +66,8 @@ function manejarMensaje(msg) {
     case "reunion-detenida": ponerEscuchando(false); break;
     case "parcial": $("parcial").textContent = msg.texto ? msg.texto + "…" : ""; break;
     case "final": nuevaFraseReunion(msg.texto); break;
+    case "sin-voz": $("parcial").textContent = "🎵 Sonido sin voz que se entienda (música o ruido)"; break;
+    case "reunion-nivel": mostrarNivel(msg); break;
     // Práctica
     case "mic-grabando": ponerGrabando(true); break;
     case "mic-nivel": $("nivel-mic").style.width = Math.min(100, msg.nivel * 600) + "%"; break;
@@ -92,18 +94,29 @@ function ponerEscuchando(si) {
   const b = $("btn-escuchar");
   b.textContent = si ? "■ Dejar de escuchar" : "▶ Escuchar esta pestaña";
   b.classList.toggle("activo", si);
+  $("monitor").classList.toggle("oculto", !si);
   if (!si) $("parcial").textContent = "";
 }
 
-async function alternarEscucha() {
+// Medidor de audio: así se ve al instante que la pestaña suena y que la extensión la oye.
+function mostrarNivel({ nivel, voz, cargando }) {
+  $("medidor-reunion").style.width = Math.min(100, nivel * 800) + "%";
+  const ind = $("indicador");
+  ind.classList.toggle("voz", voz && !cargando);
+  ind.textContent = cargando
+    ? "Cargando Whisper… (el audio se guarda y se transcribe al terminar)"
+    : nivel < 0.0005 ? "Silencio en la pestaña" : voz ? "Oyendo voz…" : "Escuchando…";
+}
+
+async function alternarEscucha(_evento, tabIdForzado) {
   $("aviso-reunion").textContent = "";
   if (escuchando) {
     enviar({ type: "reunion-detener" });
     return;
   }
   try {
-    const [pestana] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: pestana.id });
+    const tabId = tabIdForzado ?? (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0].id;
+    const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
     enviar({ type: "reunion-iniciar", streamId });
   } catch (e) {
     $("aviso-reunion").textContent =
@@ -287,6 +300,9 @@ async function comprobarOllama() {
     mostrarEstado("llm", e.message);
   }
 }
+
+// Gancho para las pruebas automáticas (tools/e2e.mjs).
+globalThis.meetCoach = { escucharPestana: (tabId) => alternarEscucha(null, tabId) };
 
 // ================================================================== inicio
 document.querySelectorAll(".pestana").forEach((b) =>

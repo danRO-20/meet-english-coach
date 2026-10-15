@@ -39,24 +39,27 @@ Micrófono ──► Whisper ──► Ollama (tutor) ──► voz de la IA (sp
 
 ### ⚡ Si tu laptop tiene GPU NVIDIA (muy recomendado)
 
-En laptops con dos GPU, Chrome usa por defecto la **integrada (Intel/AMD)** y Whisper va lento (~15 s por frase). Haz que Chrome use la NVIDIA:
+En laptops con dos GPU, Chrome usa por defecto la **integrada (Intel)**. En ese caso la extensión transcribe con la CPU (4 núcleos, ≈1.5 s por pasada: el texto aparece 1–3 s después de que hablen). Con la NVIDIA va mucho más rápido. Para que Chrome la use:
 
 1. Windows → **Configuración → Sistema → Pantalla → Gráficos**.
 2. Busca **Google Chrome** (si no aparece: *Agregar aplicación* → `C:\Program Files\Google\Chrome\Application\chrome.exe`).
 3. **Opciones → Alto rendimiento (NVIDIA)** → Guardar, y **reinicia Chrome por completo**.
 
-Con eso Whisper transcribe una frase en menos de 1 s. Si la extensión detecta que la GPU es lenta, usa la CPU automáticamente (≈3–4 s por frase) y lo indica en la barra de estado.
+La barra de estado del panel dice qué motor se está usando: `GPU nvidia` o `CPU ×4 (Chrome usa la GPU Intel…)`.
 
 ## Uso en Google Meet
 
 1. Abre tu llamada en `meet.google.com`.
 2. Estando en esa pestaña, haz clic en el icono **EN** de la extensión (o `Alt+Shift+E`). Se abre el panel lateral.
 3. Pulsa **▶ Escuchar esta pestaña**. La primera vez descarga Whisper (~150 MB, queda en caché).
-4. Cuando la otra persona hable verás:
+4. Debajo del botón verás un **medidor de audio** (verde) y si está oyendo voz, silencio o cargando Whisper.
+5. Cuando la otra persona hable verás:
    - lo que dijo (en gris mientras habla, fijo al terminar la frase),
    - la traducción en azul,
    - 💡 una sugerencia de respuesta en amarillo (≈0.5 s después).
-5. **■ Dejar de escuchar** o cierra el panel para parar.
+6. **■ Dejar de escuchar** o cierra el panel para parar.
+
+Con música de fondo también funciona: la música sola no genera texto y, si hablan encima, el texto sale igual (las frases se cierran cada 10 s como máximo).
 
 > La sugerencia es una ayuda para orientarte, no un guion: tú decides qué decir.
 
@@ -102,12 +105,23 @@ tools/
   vendor.mjs           copia las librerías a extension/lib
   dev-test.html        banco de pruebas: segmentador + Whisper + prompts sobre un WAV
   test-llm.mjs         prueba los prompts contra Ollama desde la terminal
+  e2e.mjs              instala la extensión en un Chrome aparte, reproduce un WAV en una pestaña y
+                       registra lo que muestra el panel (modo Reunión)
+  e2e-practica.mjs     lo mismo para el modo Práctica, con un micrófono simulado
+  bench.mjs            mide la velocidad de Whisper (tiny/base, 4/8 hilos) dentro de la extensión
+  mezclar-musica.mjs   crea un WAV de prueba con música de fondo
 ```
 
 Actualizar las librerías:
 
 ```bash
 cd tools && npm install && node vendor.mjs
+```
+
+Pruebas de punta a punta (usan tu Chrome con un perfil temporal; necesitan `npm install` en `tools/`):
+
+```bash
+node tools/e2e.mjs tools/mi-audio.wav 60
 ```
 
 Probar prompts: `node tools/test-llm.mjs`. Probar Whisper: sirve la raíz del repo (`python -m http.server 8765`) y abre `http://localhost:8765/tools/dev-test.html?wav=/tools/tu-audio.wav`.

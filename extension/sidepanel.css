@@ -54,6 +54,11 @@ select, input {
 }
 .barra select { flex: 1; }
 
+.monitor { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--tenue); }
+.medidor { flex: 0 0 90px; height: 6px; border-radius: 3px; background: var(--tarjeta); overflow: hidden; }
+#medidor-reunion { height: 100%; width: 0; background: var(--verde); transition: width 0.12s; }
+#indicador.voz { color: var(--verde); }
+
 .aviso { margin: 0; font-size: 12px; color: var(--rojo); }
 .aviso:empty { display: none; }
 
