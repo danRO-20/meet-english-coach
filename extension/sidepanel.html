@@ -14,6 +14,20 @@
       <button class="pestana" data-modo="practica">🗣️ Práctica</button>
     </nav>
     <div id="estado" class="estado">Iniciando…</div>
+    <div class="material-barra">
+      <button id="btn-material" class="chip" title="Un archivo o texto sobre el que quieres hablar">📎 Material</button>
+      <span id="material-nombre" class="material-nombre">Sin material</span>
+      <button id="btn-quitar-material" class="chip oculto" title="Quitar material">✕</button>
+      <input type="file" id="input-archivo" accept=".pdf,.docx,.txt,.md,.csv,.json,.srt,.vtt" hidden>
+    </div>
+    <div id="panel-material" class="panel-material oculto">
+      <button id="btn-subir" class="secundario">📄 Subir archivo (PDF, Word, TXT)</button>
+      <textarea id="texto-material" rows="4" placeholder="…o pega aquí el texto: tu CV, una oferta de trabajo, la agenda de la reunión, un artículo…"></textarea>
+      <button id="btn-usar-texto" class="primario">Usar este texto</button>
+      <p class="nota">También puedes arrastrar un archivo al panel. Se lee en tu PC; no se sube a ningún sitio.
+        Se usa en <b>Práctica</b> (situación «Sobre mi material» o como contexto) y en las sugerencias de <b>Reunión</b>.</p>
+      <p id="aviso-material" class="aviso"></p>
+    </div>
   </header>
 
   <!-- ============================================================ Modo Reunión -->
@@ -38,6 +52,7 @@
   <section id="modo-practica" class="modo oculto">
     <div class="barra">
       <select id="escenario" title="Situación">
+        <option value="material">📄 Sobre mi material</option>
         <option value="libre">Charla libre</option>
         <option value="entrevista">Entrevista de trabajo</option>
         <option value="reunion">Reunión de trabajo</option>

@@ -11,7 +11,9 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@huggingface/transformers": "^3.8.1"
+    "@huggingface/transformers": "^3.8.1",
+    "mammoth": "^1.13.0",
+    "pdfjs-dist": "^4.10.38"
   },
   "private": true,
   "devDependencies": {

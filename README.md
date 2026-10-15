@@ -4,6 +4,7 @@ Extensión de Chrome **open source y 100% local** para ayudarte con el inglés:
 
 - **🎧 Modo Reunión**: en Google Meet (o cualquier pestaña: Zoom web, Teams web, YouTube…) escucha lo que dice la otra persona, lo **transcribe en inglés**, muestra la **traducción al español** y te **sugiere una respuesta corta**.
 - **🗣️ Modo Práctica**: conversas en voz alta con una IA que te responde hablando, mantiene la charla y **te corrige** cuando te equivocas. Situaciones: charla libre, entrevista de trabajo, reunión de trabajo, restaurante, aeropuerto/hotel; niveles básico, intermedio y avanzado.
+- **📎 Material**: carga un PDF, un Word o un texto (tu CV, una oferta de trabajo, la agenda de una reunión, un artículo…) y la IA conversa sobre eso; las sugerencias de reunión también lo usan.
 
 Nada sale de tu PC: la voz se transcribe con **Whisper** dentro del navegador ([transformers.js](https://github.com/huggingface/transformers.js), WebGPU o WASM) y las respuestas las genera un modelo local con **[Ollama](https://ollama.com)**. Sin APIs de pago.
 
@@ -72,6 +73,16 @@ Con música de fondo también funciona: la música sola no genera texto y, si ha
 
 La primera vez Chrome abrirá una pestaña para pedir permiso de micrófono: pulsa **Permitir** y vuelve al panel.
 
+## 📎 Material: practicar sobre un tema concreto
+
+1. Pulsa **📎 Material** (arriba en el panel) y luego **📄 Subir archivo**, o pega el texto y pulsa **Usar este texto**. También puedes **arrastrar** el archivo al panel.
+   - Formatos: **PDF** (con texto, no escaneado), **Word (.docx)**, **.txt / .md**, subtítulos **.srt / .vtt**.
+   - Se usan los primeros ~10.000 caracteres (unas 4 páginas). El archivo se lee en tu PC y no se sube a ningún sitio.
+2. En **🗣️ Práctica** se elige sola la situación **📄 Sobre mi material**: la IA te pregunta por detalles concretos del texto y comenta tus respuestas.
+3. En las demás situaciones el material sirve de contexto. Ejemplo: carga tu **CV** y elige **Entrevista de trabajo**: el entrevistador te preguntará por *tu* experiencia real.
+4. En **🎧 Reunión**, las sugerencias usan los datos del material en vez de huecos como `[your city]`. Ejemplo con tu CV: a *"Tell me about yourself"* te sugiere una respuesta con tu trabajo real.
+5. El material queda guardado hasta que pulses **✕**.
+
 ## Ajustes (⚙️ al pie del panel)
 
 | Ajuste | Para qué |
@@ -99,8 +110,9 @@ extension/
   segmenter.js         separa frases por energía/silencios
   audio-processor.js   AudioWorklet que envía bloques de 100 ms
   llm.js               prompts y llamadas a Ollama
+  material.js          extrae el texto de PDF (pdf.js), Word (mammoth) y TXT
   sidepanel.*          interfaz de los dos modos
-  lib/                 transformers.js + onnxruntime-web (empaquetados: MV3 no permite CDN)
+  lib/                 transformers.js, onnxruntime-web, pdf.js y mammoth (empaquetados: MV3 no permite CDN)
 tools/
   vendor.mjs           copia las librerías a extension/lib
   dev-test.html        banco de pruebas: segmentador + Whisper + prompts sobre un WAV
@@ -108,6 +120,7 @@ tools/
   e2e.mjs              instala la extensión en un Chrome aparte, reproduce un WAV en una pestaña y
                        registra lo que muestra el panel (modo Reunión)
   e2e-practica.mjs     lo mismo para el modo Práctica, con un micrófono simulado
+  e2e-material.mjs     crea un PDF, lo carga como material y comprueba práctica y sugerencias
   bench.mjs            mide la velocidad de Whisper (tiny/base, 4/8 hilos) dentro de la extensión
   mezclar-musica.mjs   crea un WAV de prueba con música de fondo
 ```

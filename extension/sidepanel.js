@@ -1,5 +1,6 @@
 // Panel lateral: interfaz de los dos modos, llamadas a Ollama y voz de la IA.
 import { responderPractica, sugerirRespuesta, verificarOllama } from "./llm.js";
+import { MAX_CARACTERES, leerArchivo, limpiar } from "./material.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -15,6 +16,7 @@ const AJUSTES_POR_DEFECTO = {
 let ajustes = { ...AJUSTES_POR_DEFECTO };
 let puerto = null;
 const estados = {};
+let material = null; // { nombre, texto, recortado }
 
 // ================================================================== utilidades de interfaz
 function crear(etiqueta, clase, texto) {
@@ -151,6 +153,7 @@ async function procesarPendientes() {
       frase,
       contexto: contexto.slice(-6),
       traducir: ajustes.traducir,
+      material,
     });
     if (traduccion) item.insertBefore(crear("div", "es", traduccion), sug);
     sug.className = "sug";
@@ -197,6 +200,11 @@ function burbujaIA(texto) {
 }
 
 async function turnoIA() {
+  if ($("escenario").value === "material" && !material) {
+    agregarAlFeed($("chat"), crear("div", "escribiendo", "Primero carga tu material con 📎 Material (arriba) y vuelve a empezar."));
+    $("panel-material").classList.remove("oculto");
+    return;
+  }
   const escribiendo = agregarAlFeed($("chat"), crear("div", "escribiendo", "…"));
   $("btn-hablar").disabled = true;
   try {
@@ -206,6 +214,7 @@ async function turnoIA() {
       escenario: $("escenario").value,
       nivel: $("nivel").value,
       historial,
+      material,
     });
     escribiendo.remove();
     if (r.correccion) {
@@ -257,6 +266,62 @@ function alternarMic() {
     enviar({ type: "mic-iniciar", conPrevio: !iaHablando });
   }
 }
+
+// ================================================================== material
+function mostrarMaterial() {
+  const n = $("material-nombre");
+  n.classList.toggle("activo", !!material);
+  n.textContent = material
+    ? `📄 ${material.nombre} · ${material.texto.length.toLocaleString("es")} caracteres${material.recortado ? " (recortado)" : ""}`
+    : "Sin material";
+  n.title = material ? material.texto.slice(0, 400) + "…" : "";
+  $("btn-quitar-material").classList.toggle("oculto", !material);
+}
+
+async function usarMaterial(nuevo) {
+  material = nuevo;
+  await chrome.storage.local.set({ material });
+  mostrarMaterial();
+  $("panel-material").classList.add("oculto");
+  $("aviso-material").textContent = "";
+  $("escenario").value = "material"; // lo normal es querer practicar justo sobre eso
+}
+
+async function cargarArchivo(archivo) {
+  $("aviso-material").textContent = "Leyendo " + archivo.name + "…";
+  $("panel-material").classList.remove("oculto");
+  try {
+    await usarMaterial(await leerArchivo(archivo));
+  } catch (e) {
+    $("aviso-material").textContent = e.message;
+  }
+}
+
+$("btn-material").addEventListener("click", () => $("panel-material").classList.toggle("oculto"));
+$("btn-subir").addEventListener("click", () => $("input-archivo").click());
+$("input-archivo").addEventListener("change", (e) => {
+  if (e.target.files[0]) cargarArchivo(e.target.files[0]);
+  e.target.value = "";
+});
+$("btn-usar-texto").addEventListener("click", () => {
+  const texto = limpiar($("texto-material").value);
+  if (!texto) return;
+  usarMaterial({ nombre: "Texto pegado", texto: texto.slice(0, MAX_CARACTERES), recortado: texto.length > MAX_CARACTERES });
+  $("texto-material").value = "";
+});
+$("btn-quitar-material").addEventListener("click", async () => {
+  material = null;
+  await chrome.storage.local.remove("material");
+  mostrarMaterial();
+});
+// Arrastrar y soltar un archivo en cualquier parte del panel.
+document.addEventListener("dragover", (e) => { e.preventDefault(); document.body.classList.add("arrastrando"); });
+document.addEventListener("dragleave", (e) => { if (!e.relatedTarget) document.body.classList.remove("arrastrando"); });
+document.addEventListener("drop", (e) => {
+  e.preventDefault();
+  document.body.classList.remove("arrastrando");
+  if (e.dataTransfer.files[0]) cargarArchivo(e.dataTransfer.files[0]);
+});
 
 // ================================================================== ajustes
 async function cargarAjustes() {
@@ -338,6 +403,8 @@ for (const id of ["cfg-modelo", "cfg-url", "cfg-whisper", "cfg-traducir", "cfg-v
 speechSynthesis.onvoiceschanged = llenarVoces;
 
 await cargarAjustes();
+material = (await chrome.storage.local.get("material")).material || null;
+mostrarMaterial();
 llenarVoces();
 comprobarOllama();
 conectar();
