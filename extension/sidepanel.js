@@ -6,7 +6,7 @@ const $ = (id) => document.getElementById(id);
 const AJUSTES_POR_DEFECTO = {
   modelo: "llama3.2:3b",
   url: "http://127.0.0.1:11434",
-  modeloWhisper: "onnx-community/whisper-base.en",
+  modeloWhisper: "auto",
   traducir: true,
   voz: "",
   velocidad: 0.95,
@@ -243,6 +243,7 @@ function empezarPractica() {
   $("btn-hablar").classList.remove("oculto");
   $("form-texto").classList.remove("oculto");
   ponerGrabando(false);
+  enviar({ type: "mic-abrir" }); // abrirlo ya: así al pulsar Hablar graba al instante
   turnoIA();
 }
 
@@ -250,8 +251,10 @@ function alternarMic() {
   if (grabando) {
     enviar({ type: "mic-terminar" });
   } else {
+    const iaHablando = speechSynthesis.speaking;
     speechSynthesis.cancel(); // si la IA está hablando, la callamos para que hables tú
-    enviar({ type: "mic-iniciar" });
+    // El audio de justo antes del clic sirve si empezaste a hablar ya, pero no si era la voz de la IA.
+    enviar({ type: "mic-iniciar", conPrevio: !iaHablando });
   }
 }
 
@@ -310,6 +313,9 @@ document.querySelectorAll(".pestana").forEach((b) =>
     document.querySelectorAll(".pestana").forEach((x) => x.classList.toggle("activa", x === b));
     $("modo-reunion").classList.toggle("oculto", b.dataset.modo !== "reunion");
     $("modo-practica").classList.toggle("oculto", b.dataset.modo !== "practica");
+    // El micrófono solo queda abierto mientras estás en el modo Práctica con una conversación en curso.
+    if (b.dataset.modo === "practica" && historial.length) enviar({ type: "mic-abrir" });
+    if (b.dataset.modo !== "practica") enviar({ type: "mic-cerrar" });
   }),
 );
 $("btn-escuchar").addEventListener("click", alternarEscucha);

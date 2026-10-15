@@ -74,6 +74,7 @@
     <label>URL de Ollama <input id="cfg-url" placeholder="http://127.0.0.1:11434"></label>
     <label>Modelo Whisper
       <select id="cfg-whisper">
+        <option value="auto">Automático (small.en con GPU, base.en en CPU)</option>
         <option value="onnx-community/whisper-base.en">base.en (rápido, ~150 MB)</option>
         <option value="onnx-community/whisper-small.en">small.en (más preciso, ~500 MB)</option>
       </select>

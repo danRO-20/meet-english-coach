@@ -1,5 +1,5 @@
 // Prueba del modo Práctica con un micrófono simulado que "dice" un WAV.
-//   node tools/e2e-practica.mjs [ruta.wav]
+//   node tools/e2e-practica.mjs [ruta.wav] [segundos hablando]
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -8,6 +8,7 @@ import puppeteer from "puppeteer-core";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 const wav = resolve(process.argv[2] || join(aqui, "prueba.wav"));
+const segundosHablando = Number(process.argv[3] || 9);
 const perfil = mkdtempSync(join(tmpdir(), "meet-coach-practica-"));
 const navegador = await puppeteer.launch({
   executablePath: process.env.CHROME || "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
@@ -31,10 +32,12 @@ try {
   log("IA empieza:", (await chat(p)).join(" / "));
 
   await p.click("#btn-hablar");
-  await esperar(9000); // el micrófono simulado "habla" el WAV
+  await esperar(segundosHablando * 1000); // el micrófono simulado "habla" el WAV (en bucle)
   log("botón mientras graba:", await p.$eval("#txt-hablar", (e) => e.textContent));
   await p.click("#btn-hablar");
-  await p.waitForFunction(() => document.querySelectorAll("#chat .burbuja.ia").length >= 2, { timeout: 90000 });
+  const t = Date.now();
+  await p.waitForFunction(() => document.querySelectorAll("#chat .burbuja.ia").length >= 2, { timeout: 120000 });
+  log(`respuesta ${((Date.now() - t) / 1000).toFixed(1)} s después de pulsar Enviar`);
   log("después de hablar:");
   for (const linea of await chat(p)) log("   ", linea);
   log("estado:", await p.$eval("#estado", (e) => e.textContent));

@@ -66,7 +66,7 @@ Con música de fondo también funciona: la música sola no genera texto y, si ha
 ## Modo Práctica
 
 1. En el panel, pestaña **🗣️ Práctica**. Elige situación y nivel → **Empezar conversación**.
-2. La IA te saluda **en voz alta**. Pulsa **🎤 Hablar**, responde en inglés y pulsa **■ Enviar**.
+2. La IA te saluda **en voz alta**. Pulsa **🎤 Hablar**, responde en inglés y pulsa **■ Enviar**. El micrófono queda abierto mientras practicas, así que graba desde el primer instante (incluso medio segundo antes del clic) y sigue 0.6 s después de Enviar para no cortar tu última palabra. Puedes hablar todo lo que quieras: los mensajes de más de 30 s también se transcriben completos.
 3. Si te equivocas verás en verde la versión corregida y una explicación corta en español.
 4. 🔊 repite la frase de la IA. También puedes escribir tu respuesta en el cuadro de texto.
 
@@ -77,7 +77,7 @@ La primera vez Chrome abrirá una pestaña para pedir permiso de micrófono: pul
 | Ajuste | Para qué |
 | --- | --- |
 | Modelo de Ollama | `llama3.2:3b` por defecto. Cualquiera que tengas con `ollama pull`. |
-| Modelo Whisper | `base.en` (rápido) o `small.en` (más preciso, más pesado). |
+| Modelo Whisper | **Automático** (por defecto): `small.en` con GPU dedicada, `base.en` en CPU. También puedes fijar uno. |
 | Mostrar traducción | Activa o desactiva la traducción al español en el modo Reunión. |
 | Voz / velocidad | Voz en inglés de la IA del modo Práctica. |
 

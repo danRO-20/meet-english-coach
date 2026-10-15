@@ -38,7 +38,11 @@ async function cargarWhisper() {
 
     const { device, fabricante } = await elegirMotor();
     enCPU = device === "wasm";
-    const modelo = ajustes.modeloWhisper || "onnx-community/whisper-base.en";
+    // "auto": small.en (más preciso con acento no nativo) si hay GPU dedicada; base.en en CPU.
+    const elegido = ajustes.modeloWhisper || "auto";
+    const modelo = elegido === "auto"
+      ? `onnx-community/whisper-${enCPU ? "base" : "small"}.en`
+      : elegido;
     const nombreCorto = modelo.split("/").pop();
     estado(`Cargando ${nombreCorto} (la 1.ª vez se descarga)…`);
     const p = await pipeline("automatic-speech-recognition", modelo, {
@@ -75,7 +79,8 @@ function limpiarTexto(texto) {
 
 async function transcribir(audio) {
   const p = await cargarWhisper();
-  const salida = await p(audio);
+  // Whisper procesa ventanas de 30 s: para audios más largos lo partimos en trozos solapados.
+  const salida = await p(audio, audio.length > FRECUENCIA * 28 ? { chunk_length_s: 30, stride_length_s: 5 } : {});
   const texto = limpiarTexto(salida.text || "");
   return /thanks for watching|thank you for watching|subscribe/i.test(texto) ? "" : texto;
 }
@@ -171,38 +176,73 @@ function pararReunion() {
 }
 
 // ------------------------------------------------------------------ modo Práctica (micrófono)
+// El micrófono queda abierto mientras estás en el modo Práctica: así no se pierden las primeras
+// palabras esperando a que abra, y guardamos ~0.5 s de antes del clic por si empezaste a hablar ya.
+const BLOQUES_PREVIOS = 5;   // bloques de 100 ms
 let detenerMic = null;
+let abriendoMic = null;
+let grabandoMic = false;
 let bloquesMic = [];
+let previosMic = [];
 
-async function iniciarMic() {
-  pararMicSinEnviar();
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+function abrirMic() {
+  if (detenerMic) return Promise.resolve(true);
+  if (abriendoMic) return abriendoMic;
+  abriendoMic = (async () => {
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+    } catch (e) {
+      enviar({ type: "mic-sin-permiso", error: e.message });
+      return false;
+    }
+    detenerMic = await crearCaptura(stream, (bloque) => {
+      if (!grabandoMic) {
+        previosMic.push(bloque);
+        if (previosMic.length > BLOQUES_PREVIOS) previosMic.shift();
+        return;
+      }
+      bloquesMic.push(bloque);
+      let s = 0;
+      for (let i = 0; i < bloque.length; i++) s += bloque[i] * bloque[i];
+      enviar({ type: "mic-nivel", nivel: Math.sqrt(s / bloque.length) });
     });
-  } catch (e) {
-    enviar({ type: "mic-sin-permiso", error: e.message });
-    return;
-  }
-  bloquesMic = [];
-  detenerMic = await crearCaptura(stream, (bloque) => {
-    bloquesMic.push(bloque);
-    let s = 0;
-    for (let i = 0; i < bloque.length; i++) s += bloque[i] * bloque[i];
-    enviar({ type: "mic-nivel", nivel: Math.sqrt(s / bloque.length) });
-  });
+    return true;
+  })().finally(() => { abriendoMic = null; });
+  return abriendoMic;
+}
+
+async function iniciarMic({ conPrevio = true } = {}) {
+  if (!(await abrirMic())) return;
+  // Si la IA estaba hablando justo antes, el audio previo tendría su voz: lo descartamos.
+  bloquesMic = conPrevio ? previosMic.splice(0) : [];
+  previosMic = [];
+  grabandoMic = true;
   enviar({ type: "mic-grabando" });
   cargarWhisper().catch(() => {});
 }
 
-function pararMicSinEnviar() {
+function cerrarMic() {
+  grabandoMic = false;
+  bloquesMic = [];
+  previosMic = [];
   detenerMic?.();
   detenerMic = null;
 }
 
+function pararMicSinEnviar() {
+  grabandoMic = false;
+  bloquesMic = [];
+}
+
 async function terminarMic() {
-  pararMicSinEnviar();
+  if (!grabandoMic) return;
+  // Seguimos grabando 0.6 s más: al pulsar "Enviar" casi siempre estás terminando la última palabra.
+  enviar({ type: "practica-transcribiendo" });
+  await new Promise((r) => setTimeout(r, 600));
+  grabandoMic = false;
   const total = bloquesMic.reduce((n, b) => n + b.length, 0);
   const audio = new Float32Array(total);
   let pos = 0;
@@ -212,7 +252,6 @@ async function terminarMic() {
     enviar({ type: "practica-texto", texto: "" });
     return;
   }
-  enviar({ type: "practica-transcribiendo" });
   const texto = await transcribirEnCola(audio).catch(() => "");
   enviar({ type: "practica-texto", texto });
 }
@@ -234,9 +273,11 @@ chrome.runtime.onConnect.addListener((puerto) => {
         case "precargar": cargarWhisper().catch(() => {}); break;
         case "reunion-iniciar": await iniciarReunion(msg.streamId); enviar({ type: "reunion-activa" }); break;
         case "reunion-detener": pararReunion(); enviar({ type: "reunion-detenida" }); break;
-        case "mic-iniciar": await iniciarMic(); break;
+        case "mic-abrir": await abrirMic(); break;
+        case "mic-iniciar": await iniciarMic(msg); break;
         case "mic-terminar": await terminarMic(); break;
         case "mic-cancelar": pararMicSinEnviar(); break;
+        case "mic-cerrar": cerrarMic(); break;
       }
     } catch (e) {
       enviar({ type: "error", texto: e.message });
@@ -246,6 +287,6 @@ chrome.runtime.onConnect.addListener((puerto) => {
   puerto.onDisconnect.addListener(() => {
     if (panel === puerto) panel = null;
     pararReunion();
-    pararMicSinEnviar();
+    cerrarMic();
   });
 });
