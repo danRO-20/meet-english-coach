@@ -4,6 +4,7 @@ Extensión de Chrome **open source y 100% local** para ayudarte con el inglés:
 
 - **🎧 Modo Reunión**: en Google Meet (o cualquier pestaña: Zoom web, Teams web, YouTube…) muestra un **cuadro flotante de subtítulos** sobre la página, al estilo de los subtítulos en tiempo real de Chrome: el texto en inglés aparece **mientras la persona habla** y, cuando se calla, la **traducción al español** y una **respuesta sugerida**.
 - **🗣️ Modo Práctica**: conversas en voz alta con una IA que te responde hablando, mantiene la charla y **te corrige** cuando te equivocas. Situaciones: charla libre, entrevista de trabajo, reunión de trabajo, restaurante, aeropuerto/hotel; niveles básico, intermedio y avanzado.
+- **🇪🇸 Subtítulos en español**: el mismo cuadro flotante, pero para audios en español (solo transcripción, sin traducción ni sugerencias).
 - **📎 Material**: carga un PDF, un Word o un texto (tu CV, una oferta de trabajo, la agenda de una reunión, un artículo…) y la IA conversa sobre eso; las sugerencias de reunión también lo usan.
 
 Nada sale de tu PC: la voz se transcribe con **Whisper** dentro del navegador ([transformers.js](https://github.com/huggingface/transformers.js), WebGPU o WASM) y las respuestas las genera un modelo local con **[Ollama](https://ollama.com)**. Sin APIs de pago.
@@ -60,6 +61,10 @@ La barra de estado del panel dice qué motor se está usando: `GPU nvidia` o `CP
    - **◱** oculta la traducción y la sugerencia (solo subtítulos); **✕** deja de escuchar.
 5. En el panel lateral queda el **historial** de la conversación y un medidor de audio. Puedes cerrar el panel: el cuadro sigue funcionando.
 6. Si prefieres no ver el cuadro, desactívalo en ⚙️ Ajustes → *Cuadro flotante de subtítulos*.
+
+### Subtítulos en español
+
+Junto al botón **Escuchar** hay un selector de idioma: **🇬🇧 Inglés** (subtítulos + traducción + respuesta sugerida) o **🇪🇸 Español** (solo subtítulos). En español usa el modelo multilingüe de Whisper (`whisper-small` con GPU, `whisper-base` en CPU); la primera vez lo descarga (~500 MB con GPU). El texto en vivo se actualiza un poco más despacio que en inglés (~1–1.5 s), porque ese modelo es más grande.
 
 Con música de fondo también funciona: la música sola no genera texto y, si hablan encima, el texto sale igual (las frases se cierran cada 10 s como máximo).
 

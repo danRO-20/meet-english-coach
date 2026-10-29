@@ -30,15 +30,21 @@ const enCPU = () => motor?.device !== "webgpu";
 
 // "auto": en Reunión base.en (rápido: el texto sale casi al instante); en Práctica small.en con GPU
 // (más preciso con acento no nativo, y ahí no importa medio segundo más).
-function modeloPara(uso) {
+// Para subtítulos en español hace falta un modelo multilingüe (los ".en" solo entienden inglés):
+// small con GPU (base se equivoca bastante en español), base en CPU.
+function modeloPara(uso, idioma = "en") {
   const elegido = ajustes.modeloWhisper || "auto";
+  if (idioma === "es") {
+    if (elegido !== "auto") return elegido.replace(/\.en$/, "");
+    return `onnx-community/whisper-${enCPU() ? "base" : "small"}`;
+  }
   if (elegido !== "auto") return elegido;
   return `onnx-community/whisper-${uso === "practica" && !enCPU() ? "small" : "base"}.en`;
 }
 
-async function cargarWhisper(uso) {
+async function cargarWhisper(uso, idioma = "en") {
   await elegirMotor();
-  const modelo = modeloPara(uso);
+  const modelo = modeloPara(uso, idioma);
   if (modelos.has(modelo)) return modelos.get(modelo);
   const carga = (async () => {
     const { pipeline, env } = await import("./lib/transformers.min.js");
@@ -83,18 +89,25 @@ function limpiarTexto(texto) {
     .trim();
 }
 
-async function transcribir(audio, uso) {
-  const p = await cargarWhisper(uso);
-  // Whisper procesa ventanas de 30 s: para audios más largos lo partimos en trozos solapados.
-  const salida = await p(audio, audio.length > FRECUENCIA * 28 ? { chunk_length_s: 30, stride_length_s: 5 } : {});
-  const texto = limpiarTexto(salida.text || "");
-  return /thanks for watching|thank you for watching|subscribe/i.test(texto) ? "" : texto;
+// Frases que Whisper "inventa" con ruido o música (vienen de los subtítulos de YouTube con que se entrenó).
+const ALUCINACIONES = /thanks for watching|thank you for watching|subscribe|amara\.org|subtítulos realizados|subtitulado por|gracias por ver|suscríbete/i;
+
+async function transcribir(audio, uso, idioma = "en") {
+  const p = await cargarWhisper(uso, idioma);
+  const opciones = {
+    // Whisper procesa ventanas de 30 s: para audios más largos lo partimos en trozos solapados.
+    ...(audio.length > FRECUENCIA * 28 ? { chunk_length_s: 30, stride_length_s: 5 } : {}),
+    // En un modelo multilingüe fijamos el idioma: si no, a veces "traduce" o cambia de idioma.
+    ...(idioma === "es" ? { language: "spanish", task: "transcribe" } : {}),
+  };
+  const texto = limpiarTexto((await p(audio, opciones)).text || "");
+  return ALUCINACIONES.test(texto) ? "" : texto;
 }
 
 // Una transcripción a la vez, en orden (no se pierde ninguna final).
-function transcribirEnCola(audio, uso) {
+function transcribirEnCola(audio, uso, idioma) {
   enCola++;
-  const r = colaTranscripcion.then(() => transcribir(audio, uso)).finally(() => enCola--);
+  const r = colaTranscripcion.then(() => transcribir(audio, uso, idioma)).finally(() => enCola--);
   colaTranscripcion = r.catch(() => {});
   return r;
 }
@@ -158,7 +171,8 @@ async function procesarPendientes() {
   procesarPendientes();
 }
 
-async function iniciarReunion(streamId, tabId) {
+// idioma: "en" = subtítulos + traducción + respuesta sugerida; "es" = solo subtítulos en español.
+async function iniciarReunion(streamId, tabId, idioma = "en") {
   pararReunion();
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: { mandatory: { chromeMediaSource: "tab", chromeMediaSourceId: streamId } },
@@ -169,7 +183,7 @@ async function iniciarReunion(streamId, tabId) {
   const ctxAltavoz = new AudioContext();
   ctxAltavoz.createMediaStreamSource(stream).connect(ctxAltavoz.destination);
 
-  const modelo = modeloPara("reunion");
+  const modelo = modeloPara("reunion", idioma);
   let finUltimoParcial = 0;
   const seg = new Segmentador({
     umbral: ajustes.umbralVoz ?? 0.004,
@@ -185,17 +199,17 @@ async function iniciarReunion(streamId, tabId) {
       if (audio.length < FRECUENCIA * 0.8) return;
       // Para el parcial bastan los últimos segundos: mantiene cada pasada rápida.
       const ventana = audio.subarray(Math.max(0, audio.length - FRECUENCIA * (enCPU() ? 5 : 8)));
-      const texto = await transcribirEnCola(ventana, "reunion").catch(() => "");
+      const texto = await transcribirEnCola(ventana, "reunion", idioma).catch(() => "");
       finUltimoParcial = performance.now();
       if (texto) difundir({ type: "parcial", texto });
     },
     onFinal: async (audio) => {
-      const texto = await transcribirEnCola(audio, "reunion").catch(() => "");
+      const texto = await transcribirEnCola(audio, "reunion", idioma).catch(() => "");
       if (!texto) return difundir({ type: "sin-voz" });
       const id = ++idFrase;
       difundir({ type: "final", id, texto });
-      // "Yeah.", "Okay." no necesitan sugerencia.
-      if (texto.split(/\s+/).length >= 2) {
+      // En español solo hay subtítulos. En inglés, "Yeah.", "Okay." no necesitan sugerencia.
+      if (idioma === "en" && texto.split(/\s+/).length >= 2) {
         pendientes.push({ id, texto });
         procesarPendientes();
       }
@@ -217,7 +231,7 @@ async function iniciarReunion(streamId, tabId) {
     ctxAltavoz.close();
   };
   stream.getAudioTracks()[0].addEventListener("ended", () => pararReunion());
-  cargarWhisper("reunion").catch(() => {});
+  cargarWhisper("reunion", idioma).catch(() => {});
 }
 
 function pararReunion() {
@@ -318,10 +332,10 @@ async function manejarOrden(msg) {
         if (msg.ajustes.modeloWhisper !== ajustes.modeloWhisper) { modelos.clear(); listos.clear(); }
         ajustes = msg.ajustes;
         break;
-      case "precargar": cargarWhisper(msg.uso || "reunion").catch(() => {}); break;
+      case "precargar": cargarWhisper(msg.uso || "reunion", msg.idioma).catch(() => {}); break;
       case "reunion-iniciar":
-        await iniciarReunion(msg.streamId, msg.tabId);
-        difundir({ type: "reunion-activa" });
+        await iniciarReunion(msg.streamId, msg.tabId, msg.idioma);
+        difundir({ type: "reunion-activa", idioma: msg.idioma });
         break;
       case "reunion-detener": pararReunion(); break;
       case "mic-abrir": await abrirMic(); break;

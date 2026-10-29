@@ -116,7 +116,7 @@
       s.textContent = parcial;
       texto.appendChild(s);
     }
-    if (!finales.length && !parcial) texto.textContent = "Esperando a que alguien hable en inglés…";
+    if (!finales.length && !parcial) texto.textContent = "Esperando a que alguien hable…";
     // Como los subtítulos de Chrome: se ve siempre lo último; lo viejo se va por arriba.
     const subs = $(".subs");
     subs.scrollTop = subs.scrollHeight;

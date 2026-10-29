@@ -10,6 +10,7 @@ const AJUSTES_POR_DEFECTO = {
   modeloWhisper: "auto",
   traducir: true,
   cuadroFlotante: true,
+  idiomaAudio: "en", // idioma de lo que se habla en la pestaña (modo Reunión)
   voz: "",
   velocidad: 0.95,
   umbralVoz: 0.004,
@@ -55,7 +56,7 @@ async function conectar() {
     setTimeout(conectar, 500); // el offscreen aún no estaba listo: reintentamos
   });
   enviarAjustes();
-  puerto.postMessage({ type: "precargar", uso: "reunion" });
+  puerto.postMessage({ type: "precargar", uso: "reunion", idioma: ajustes.idiomaAudio });
 }
 
 const enviar = (msg) => puerto?.postMessage(msg);
@@ -122,7 +123,7 @@ async function alternarEscucha(_evento, tabIdForzado) {
   try {
     const tabId = tabIdForzado ?? (await chrome.tabs.query({ active: true, lastFocusedWindow: true }))[0].id;
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
-    enviar({ type: "reunion-iniciar", streamId, tabId });
+    enviar({ type: "reunion-iniciar", streamId, tabId, idioma: ajustes.idiomaAudio });
     if (ajustes.cuadroFlotante) {
       // Cuadro de subtítulos sobre la propia página (como los subtítulos de Chrome).
       chrome.scripting.executeScript({ target: { tabId }, files: ["overlay.js"] }).catch((e) => {
@@ -346,6 +347,8 @@ async function cargarAjustes() {
   $("cfg-whisper").value = ajustes.modeloWhisper;
   $("cfg-traducir").checked = ajustes.traducir;
   $("cfg-flotante").checked = ajustes.cuadroFlotante;
+  $("idioma-audio").value = ajustes.idiomaAudio;
+  $("nota-idioma").classList.toggle("oculto", ajustes.idiomaAudio !== "es");
   $("cfg-velocidad").value = ajustes.velocidad;
 }
 
@@ -400,6 +403,17 @@ document.querySelectorAll(".pestana").forEach((b) =>
   }),
 );
 $("btn-escuchar").addEventListener("click", alternarEscucha);
+$("idioma-audio").addEventListener("change", async (e) => {
+  ajustes.idiomaAudio = e.target.value;
+  await chrome.storage.local.set({ ajustes });
+  $("nota-idioma").classList.toggle("oculto", ajustes.idiomaAudio !== "es");
+  enviar({ type: "precargar", uso: "reunion", idioma: ajustes.idiomaAudio });
+  // Si ya estaba escuchando, se reinicia con el nuevo idioma.
+  if (escuchando) {
+    enviar({ type: "reunion-detener" });
+    $("aviso-reunion").textContent = "Idioma cambiado: pulsa Escuchar otra vez.";
+  }
+});
 $("btn-limpiar").addEventListener("click", () => {
   $("feed").replaceChildren();
 });

@@ -63,6 +63,8 @@ try {
   panel.on("pageerror", (e) => log("[panel error]", e.message));
   await panel.goto(`chrome-extension://${id}/sidepanel.html`);
   await new Promise((r) => setTimeout(r, 1500));
+  // IDIOMA=es para probar los subtítulos en español.
+  if (process.env.IDIOMA) await panel.select("#idioma-audio", process.env.IDIOMA);
 
   const resultado = await panel.evaluate(async () => {
     // Sin el permiso "tabs" no vemos URLs: la pestaña de audio es la anterior a la del panel.

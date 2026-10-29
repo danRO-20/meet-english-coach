@@ -34,6 +34,10 @@
   <!-- ============================================================ Modo Reunión -->
   <section id="modo-reunion" class="modo">
     <div class="barra">
+      <select id="idioma-audio" title="Idioma de lo que se habla en la pestaña">
+        <option value="en">🇬🇧 Inglés</option>
+        <option value="es">🇪🇸 Español</option>
+      </select>
       <button id="btn-escuchar" class="primario">▶ Escuchar esta pestaña</button>
       <button id="btn-limpiar" class="secundario" title="Limpiar">⌫</button>
     </div>
@@ -41,6 +45,7 @@
       <div class="medidor"><div id="medidor-reunion"></div></div>
       <span id="indicador">Escuchando…</span>
     </div>
+    <p id="nota-idioma" class="nota oculto">🇪🇸 Solo subtítulos en español (sin traducción ni sugerencias).</p>
     <p id="aviso-reunion" class="aviso"></p>
     <div id="feed" class="feed">
       <p class="vacio">Abre tu llamada de Google Meet en esta pestaña y pulsa <b>Escuchar</b>.
